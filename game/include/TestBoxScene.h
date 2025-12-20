@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <numbers>
 
+//class MultiVector;
 class TestBoxScene final : public GameScene {
 public:
     explicit TestBoxScene(const std::string& resourceDir);
@@ -41,4 +42,46 @@ private:
     float m_pheasantAmplitudeZ{10.0f};
     float m_pheasantHeight{0.0f};
     float m_pheasantScale{0.5f};
+
+    // own variables
+    TriVector cameraTargetPlayer;
+
+    enum class walkingstate {
+        forwards,
+        left,
+        right,
+        backwards,
+        none
+    };
+
+    walkingstate m_CurrentWalkingState{ walkingstate::none };
+    BiVector m_Direction{};
+
+    struct MoveIntent
+    {
+        float forward{};
+        float right{};
+    };
+    MoveIntent m_Intent{};
+
+
+    TriVector RotateDirection(const Motor& M, const TriVector& dir)
+    {
+        Motor R = { M.s(),   // or data[0]
+        0.f, 0.f, 0.f,
+        M.e23(),
+        M.e31(),
+        M.e12(),
+        0.f };
+
+        // Sandwich product
+        MultiVector mv = R * dir * ~R;
+
+        // Direction lives in trivector part
+        return TriVector{
+            mv.e032(),
+            mv.e013(),
+            mv.e021()
+        };
+    }
 };

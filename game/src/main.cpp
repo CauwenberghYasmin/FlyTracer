@@ -6,6 +6,7 @@
 #include <memory>
 #include <string_view>
 #include <cstdlib>
+#include"MyScene.h"
 
 namespace {
 
@@ -27,10 +28,12 @@ std::unique_ptr<GameScene> createScene(const std::string& name, const std::strin
     if (name == "testbox") {
         return std::make_unique<TestBoxScene>(resourceDir);
     } else if (name == "debug") {
-        return std::make_unique<DebugDemoScene>(resourceDir);
+        return std::make_unique<TestBoxScene>(resourceDir);
     }
     std::cerr << "Unknown scene '" << name << "', using debug scene\n";
-    return std::make_unique<DebugDemoScene>(resourceDir);
+    //return auto scene = std::make_unique<MyScene>(config.resourceDirectory);
+
+    return std::make_unique<TestBoxScene>(resourceDir);
 }
 
 [[nodiscard]] bool parseIntArg(const char* value, int& out) noexcept {
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
         }
 
         auto scene = createScene(sceneName, config.resourceDirectory);
+       // auto scene = std::make_unique<MyScene>(config.resourceDirectory); //for test, + added to header file!
         Application app(config.windowWidth, config.windowHeight, config.windowTitle,
                         std::move(scene), config.shaderDirectory);
         app.run();

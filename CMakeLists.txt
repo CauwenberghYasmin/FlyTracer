@@ -111,7 +111,7 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
-)
+  "game/src/MyScene.cpp"  "game/include/MyScene.h")
 target_include_directories(imgui SYSTEM PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
@@ -127,7 +127,7 @@ add_library(FlyTracerEngine STATIC
     engine/src/GameScene.cpp
     engine/src/Mesh.cpp
     engine/src/Raytracer.cpp
-)
+  "game/src/MyScene.cpp"  "game/include/MyScene.h")
 
 target_include_directories(FlyTracerEngine
     PUBLIC  ${CMAKE_SOURCE_DIR}/engine/include
@@ -163,9 +163,10 @@ set_target_properties(FlyTracerEngine PROPERTIES
 # =============================================================================
 add_executable(${PROJECT_NAME}
     game/src/main.cpp
+    #game/src/MyScene.cpp
     game/src/TestBoxScene.cpp
     game/src/DebugDemoScene.cpp
-)
+  "game/src/MyScene.cpp"  "game/include/MyScene.h")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/game/include
@@ -243,7 +244,7 @@ enable_testing()
 add_executable(FlyTracer_Test
     tests/test_mesh.cpp
     engine/src/Mesh.cpp
-)
+  "game/src/MyScene.cpp"  "game/include/MyScene.h")
 target_include_directories(FlyTracer_Test PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/include
     SYSTEM ${CMAKE_SOURCE_DIR}/external/FlyFish/src
@@ -252,7 +253,7 @@ target_link_libraries(FlyTracer_Test PRIVATE
     GTest::gtest GTest::gtest_main tinyobjloader FlyFish
 )
 
-add_executable(FlyTracer_ConfigTest tests/test_config.cpp)
+add_executable(FlyTracer_ConfigTest tests/test_config.cpp  "game/src/MyScene.cpp"  "game/include/MyScene.h")
 target_include_directories(FlyTracer_ConfigTest PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/include
 )
