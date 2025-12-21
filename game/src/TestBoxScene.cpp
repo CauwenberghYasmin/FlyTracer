@@ -76,27 +76,25 @@ void TestBoxScene::OnUpdate(float deltaTime) {
 
         TriVector currentPos = m_cameraTarget;
 
-        //for (size_t index = 0; index < m_Planes.size(); ++index) 
+        for (size_t index = 0; index < m_Planes.size(); ++index) 
         {
-            int index = 1;
             currentPos /= currentPos.e123();
 
-            float dist = (m_Planes[index] ^ currentPos).e0123();
+            float distance = (m_Planes[index] ^ currentPos).e0123();
             float meshRadius = 20.f * pheasant->scale; // size bird
        
-            if (dist < meshRadius) {
+            if (distance < meshRadius) {
                 std::cout << "collided\n";
 
-                // 3. REFLECTION (The "PGA Way")
-                // Reflecting a point P across a plane M is: P' = M * P * M
-                // This is mathematically "bouncing" the bird back inside.
-                //currentPos = (m_Planes[i] * currentPos * m_Planes[i]).Grade3();
+                float margin{ 0.5f };
+                float pushAmount = (meshRadius + margin) - distance;
 
-                // Alternatively, if you just want it to STOP at the wall (Projection):
-                 /*float push = meshRadius - dist;
-                 currentPos.e032() += m_Planes[index].e1() * push;
-                 currentPos.e013() += m_Planes[index].e2() * push;
-                 currentPos.e021() += m_Planes[index].e3() * push;*/
+                currentPos.e032() -= m_Planes[index].e1() * pushAmount;
+                currentPos.e013() -= m_Planes[index].e2() * pushAmount;
+                currentPos.e021() -= m_Planes[index].e3() * pushAmount;
+
+                SetInstancePosition(m_pheasantMeshId, currentPos);
+
             }
         }        
     }
@@ -114,7 +112,6 @@ void TestBoxScene::OnUpdate(float deltaTime) {
 
         if (signedDistance < cameraRadius)
         {
-            float pushAmount = -(cameraRadius - signedDistance);
             m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
         }
     }
