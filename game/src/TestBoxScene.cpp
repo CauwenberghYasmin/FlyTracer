@@ -28,10 +28,13 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
              Scene::Material::Lambert(Scene::Color(0.5f, 0.9f, 0.5f)));
 
     //push back all planes in vector
-    m_planes.push_back(Vector(0.0f, 0.0f, -1.0f, 0.0f));
-    m_planes.push_back(Vector(-height/2, 0.0f, 1.0f, 0.0f));
-    m_planes.push_back(Vector(-halfWidth/2, -1.0f, 0.0f, 0.0f));
-    m_planes.push_back(Vector(-halfWidth/2, 1.0f, 0.0f, 0.0f));
+    m_planes.push_back(std::move(Vector(-height/2, 0.0f, 1.0f, 0.0f)));//top
+    m_planes.push_back(std::move(Vector(-halfWidth / 2, -1.0f, 0.0f, 0.0f)));//left
+    m_planes.push_back(std::move(Vector(-halfWidth / 2, 1.0f, 0.0f, 0.0f)));//right
+    m_planes.push_back(std::move(Vector(0.0f, 0.0f, -1.0f, 0.0f))); //bootom
+    m_Planes.push_back(std::move(Vector(-halfWidth, -1.0f, 0.0f, 0.0f)));
+    m_Planes.push_back(std::move(Vector(-halfWidth, 1.0f, 0.0f, 0.0f)));
+
 
     //+ make normals point inwards
 
@@ -59,19 +62,46 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
 
 void TestBoxScene::OnUpdate(float deltaTime) {
     UpdateFPS(deltaTime);
-    
+
     //Update pheasant
     m_pheasantTime += m_pheasantSpeed * deltaTime;
 
 
-    if (auto* pheasant = FindInstance("pheasant")) {  
-       //get pos for camera -> in 
+    if (auto* pheasant = FindInstance("pheasant")) {
+        //get pos for camera -> in 
         const TriVector origin(0.0f, 0.0f, 0.0f); //safety net 
-        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen    
+        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen  
+
+        //------------------------collision walls----------------------------
+
+        TriVector currentPos = m_cameraTarget;
+
+        //for (size_t index = 0; index < m_Planes.size(); ++index) 
+        {
+            int index = 1;
+            currentPos /= currentPos.e123();
+
+            float dist = (m_Planes[index] ^ currentPos).e0123();
+            float meshRadius = 20.f * pheasant->scale; // size bird
+       
+            if (dist < meshRadius) {
+                std::cout << "collided\n";
+
+                // 3. REFLECTION (The "PGA Way")
+                // Reflecting a point P across a plane M is: P' = M * P * M
+                // This is mathematically "bouncing" the bird back inside.
+                //currentPos = (m_Planes[i] * currentPos * m_Planes[i]).Grade3();
+
+                // Alternatively, if you just want it to STOP at the wall (Projection):
+                 /*float push = meshRadius - dist;
+                 currentPos.e032() += m_Planes[index].e1() * push;
+                 currentPos.e013() += m_Planes[index].e2() * push;
+                 currentPos.e021() += m_Planes[index].e3() * push;*/
+            }
+        }        
     }
 
     //-----------------check collision with camera---------------------
-
     for (size_t index = 0; index < m_planes.size(); ++index)
     {
         TriVector cameraPoint = m_cameraEye;
@@ -84,30 +114,24 @@ void TestBoxScene::OnUpdate(float deltaTime) {
 
         if (signedDistance < cameraRadius)
         {
-            std::cout << "Collision with plane " << index << "!" << std::endl;
-
-            // 4. PUSH the camera back
-            // We calculate the push vector: Normal * (Required Distance - Current Distance)
-            float pushAmount = (cameraRadius - signedDistance);
-
-             //This moves the camera back along the plane's normal
-            m_cameraEye.e032() += m_planes[index].e1() * pushAmount; // Move X
-            m_cameraEye.e013() += m_planes[index].e2() * pushAmount; // Move Y
-            m_cameraEye.e021() += m_planes[index].e3() * pushAmount; // Move Z
-
-             //Update the camera target as well so the camera doesn't 'jerk'
-            m_cameraTarget.e032() += m_planes[index].e1() * pushAmount;
-            m_cameraTarget.e013() += m_planes[index].e2() * pushAmount;
-            m_cameraTarget.e021() += m_planes[index].e3() * pushAmount;
+            float pushAmount = -(cameraRadius - signedDistance);
+            m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
         }
-    }    
-}
+    }
+
+
+    if (m_cameraEye.e013() == NAN) //small safety measure
+    {
+        std::cout << "camera crashed";
+        m_cameraEye = TriVector(0.0f, 15.0f, 60.0f);
+    }
+}   
 
 void TestBoxScene::OnInput(const InputState& input) {
     if (input.rightMouseDown) {
         m_cameraYaw -= input.mouseDeltaX * m_mouseSensitivity;
         m_cameraPitch += input.mouseDeltaY * m_mouseSensitivity;
-        m_cameraPitch = std::clamp(m_cameraPitch, -1.4f, 1.4f);
+        m_cameraPitch = std::clamp(m_cameraPitch, -1.55f, 1.55f);
 
 
         //----------ROTATION----------------            //only when redirecting camera (right mouse button)
@@ -149,14 +173,17 @@ void TestBoxScene::OnInput(const InputState& input) {
     const float camY = std::sin(m_cameraPitch) * m_cameraDistance + targetY;
     const float camZ = std::cos(m_cameraYaw) * std::cos(m_cameraPitch) * m_cameraDistance;
 
-    m_cameraEye = m_cameraTarget + TriVector(camX, camY, camZ); //cam follows bird
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f);
 
+    // nan check
+    if (!std::isnan(camX) && !std::isnan(camY) && !std::isnan(camZ)) {
+        m_cameraEye = m_cameraTarget + TriVector(camX, camY, camZ); //cam follows bird
+    }
+ 
     //direction in game
     //z is forward
     //x pos is left
     //y is upwards
-
 
     //------------------movement-----------------------------
 
@@ -191,7 +218,6 @@ void TestBoxScene::OnInput(const InputState& input) {
         }
         if (translatePheasant) //only do if buttons pressed
         {
-            const float movementSpeed{ m_pheasantSpeed / 5.f };
             const Motor T{ Motor::Translation(movementSpeed, movementDirection) };
             pheasant->transform = pheasant->transform * T;
         }
@@ -208,15 +234,7 @@ void TestBoxScene::OnGui() {
     ImGui::Begin("Test Box Scene");
     ImGui::Text("FPS: %.1f", GetFPS());
     ImGui::Separator();
-    ImGui::Text("Box: 100 x 30 x 40");
-    ImGui::Text("4 Planes (bottom, top, left, right)");
-    ImGui::Text("2 Spheres (rotating)");
-    ImGui::Text("1 Pheasant (sine wave, scale=%.2f)", m_pheasantScale);
-    ImGui::Text("1 Point Light");
-    ImGui::Separator();
-    ImGui::Text("Sphere Rotation:");
-    ImGui::Text("  Angle: %.2f rad (%.1f deg)", m_rotationAngle, m_rotationAngle * (180.0f / kPi));
-    ImGui::SliderFloat("Speed", &m_rotationSpeed, 0.0f, 3.0f);
+    ImGui::SliderFloat("Speed pheasant", &movementSpeed, 0.0f, 2.0f);
     ImGui::Separator();
     ImGui::Text("Controls:");
     ImGui::Text("  Right-drag: Orbit camera");

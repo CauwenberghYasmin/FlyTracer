@@ -98,4 +98,7 @@ private:
     }
 
     std::vector<Vector> m_planes;
+    std::vector<Vector> m_Planes;
+
+    float movementSpeed{ m_pheasantSpeed / 5.f };
 };
