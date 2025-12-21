@@ -3,6 +3,7 @@
 #include "GameScene.h"
 #include <cstdint>
 #include <numbers>
+#include <vector>
 
 //class MultiVector;
 class TestBoxScene final : public GameScene {
@@ -84,4 +85,17 @@ private:
             mv.e021()
         };
     }
+
+    float calcAngleInDegreesBetweenTwoBivecs(const BiVector& line1, const BiVector& line2) const
+    {
+        const BiVector line1Perp{ 0.f, 0.f, 0.f, -line1.e12(), 0.f, line1.e23() };
+        const float cos{ line1 | -line2 };
+        const float sin{ line1Perp | -line2 };
+        float angleDeg{ std::acos(cos) / 3.14158f * 180.f };
+        if (sin > 0.f || angleDeg > 360.f)
+            angleDeg = 360.f - angleDeg;
+        return angleDeg;
+    }
+
+    std::vector<Vector> m_planes;
 };

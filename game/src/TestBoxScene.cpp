@@ -12,20 +12,29 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     constexpr float height = 30.0f;
 
     // Bottom plane
-    AddPlane(Vector(0.0f, 0.0f, 1.0f, 0.0f),
+    AddPlane (Vector(0.0f, 0.0f, 1.0f, 0.0f),
              Scene::Material::Lambert(Scene::Color(0.6f, 0.6f, 0.6f)));
 
     // Top plane
     AddPlane(Vector(height, 0.0f, -1.0f, 0.0f),
              Scene::Material::Lambert(Scene::Color(0.8f, 0.8f, 0.9f)));
 
-    // Left plane
+    // Left plane blue
     AddPlane(Vector(halfWidth, 1.0f, 0.0f, 0.0f),
              Scene::Material::Lambert(Scene::Color(0.9f, 0.5f, 0.5f)));
 
     // Right plane
     AddPlane(Vector(halfWidth, -1.0f, 0.0f, 0.0f),
              Scene::Material::Lambert(Scene::Color(0.5f, 0.9f, 0.5f)));
+
+    //push back all planes in vector
+    m_planes.push_back(Vector(0.0f, 0.0f, -1.0f, 0.0f));
+    m_planes.push_back(Vector(-height/2, 0.0f, 1.0f, 0.0f));
+    m_planes.push_back(Vector(-halfWidth/2, -1.0f, 0.0f, 0.0f));
+    m_planes.push_back(Vector(-halfWidth/2, 1.0f, 0.0f, 0.0f));
+
+    //+ make normals point inwards
+
 
     // Pheasant mesh
     m_pheasantMeshId = LoadMesh("pheasant.obj", "pheasant.png");
@@ -43,7 +52,6 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     AddPointLight(TriVector(0.0f, 100.0f, 0.0f),
         Scene::Color(1.0f, 1.0f, 1.0f), 2.0f, 100.0f);
 
-
     // Camera
     m_cameraEye = TriVector(0.0f, 15.0f, 60.0f);
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f, 0.0f);
@@ -56,71 +64,80 @@ void TestBoxScene::OnUpdate(float deltaTime) {
     m_pheasantTime += m_pheasantSpeed * deltaTime;
 
 
-    if (auto* pheasant = FindInstance("pheasant")) {
-    //   /* const float pheasantX = std::sin(m_pheasantTime)/10.f;
-    //    const Motor translation(1.0f, pheasantX * 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    //    pheasant->transform = pheasant->transform * translation;*/
-    //  
-    //    //tryying to get my bird to look away from the camera
-    //    //pheasant->transform = (pheasant->transform * m_cameraFov);
-
-    //    //or
-    // /*   BiVector line{ 1,0,1,0,0,0 };
-    //    Motor R = Motor::Rotation(m_cameraYaw, line);
-    //    pheasant->transform = R * pheasant->transform * ~R;*/
-   
-    //    //get pos for camera -> in 
+    if (auto* pheasant = FindInstance("pheasant")) {  
+       //get pos for camera -> in 
         const TriVector origin(0.0f, 0.0f, 0.0f); //safety net 
-        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //TransformPoint with sandwhich + inversed
+        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen    
     }
 
-    //-------------------------------------------------------
-    //const TriVector localForward(0, 0, 1);
-    //const TriVector localRight(1, 0, 0);
-    //float speed{ 10.f };
-    //
-    //if (auto* pheasant = FindInstance("pheasant"))
-    //{
-    //    // Camera-relative directions
-    //    TriVector camForward =
-    //        (m_cameraTarget - m_cameraEye).Normalized();
+    //-----------------check collision with camera---------------------
 
-    //    camForward.e013() = 0.f; // remove vertical motion
-    //    camForward.Normalize();
+    for (size_t index = 0; index < m_planes.size(); ++index)
+    {
+        TriVector cameraPoint = m_cameraEye;
+        cameraPoint /= cameraPoint.e123(); //weight e123 = 1
 
-    //    TriVector worldUp(0, 1, 0);
-    //    TriVector camRight = camForward.Cross(worldUp);
-    //    camRight.Normalize();
+        MultiVector wedgeResult = m_planes[index] ^ cameraPoint; // calc distance
+        float signedDistance = wedgeResult.e0123();
 
-    //    // Combine intent
-    //    TriVector moveDir =
-    //        camForward * m_Intent.forward +
-    //        camRight * m_Intent.right;
-    //    moveDir.Normalize();
+        float cameraRadius = 0.03f; //safety net or boundry
 
-    //    // Convert direction -> ideal line
-    //    BiVector moveLine{
-    //        moveDir.e032(), // e23
-    //        moveDir.e013(), // e31
-    //        moveDir.e021(), // e12
-    //        0.f, 0.f, 0.f
-    //    };
+        if (signedDistance < cameraRadius)
+        {
+            std::cout << "Collision with plane " << index << "!" << std::endl;
 
-    //    Motor T = Motor::Translation(
-    //        speed * deltaTime,
-    //        moveLine
-    //    );
+            // 4. PUSH the camera back
+            // We calculate the push vector: Normal * (Required Distance - Current Distance)
+            float pushAmount = (cameraRadius - signedDistance);
 
-    //    // WORLD-space translation
-    //    pheasant->transform = T * pheasant->transform;
-    //}
+             //This moves the camera back along the plane's normal
+            m_cameraEye.e032() += m_planes[index].e1() * pushAmount; // Move X
+            m_cameraEye.e013() += m_planes[index].e2() * pushAmount; // Move Y
+            m_cameraEye.e021() += m_planes[index].e3() * pushAmount; // Move Z
+
+             //Update the camera target as well so the camera doesn't 'jerk'
+            m_cameraTarget.e032() += m_planes[index].e1() * pushAmount;
+            m_cameraTarget.e013() += m_planes[index].e2() * pushAmount;
+            m_cameraTarget.e021() += m_planes[index].e3() * pushAmount;
+        }
+    }    
 }
 
 void TestBoxScene::OnInput(const InputState& input) {
     if (input.rightMouseDown) {
-        m_cameraYaw += input.mouseDeltaX * m_mouseSensitivity;
+        m_cameraYaw -= input.mouseDeltaX * m_mouseSensitivity;
         m_cameraPitch += input.mouseDeltaY * m_mouseSensitivity;
         m_cameraPitch = std::clamp(m_cameraPitch, -1.4f, 1.4f);
+
+
+        //----------ROTATION----------------            //only when redirecting camera (right mouse button)
+        BiVector desiredForward = (m_cameraTarget & m_cameraEye).Normalized(); //opposite, because bird should face away!
+        desiredForward.e31() = 0; // can't go up
+        desiredForward = desiredForward.Normalized();
+        const BiVector localForward{ 0,0,0,0,0,1 };
+
+        if (auto* pheasant = FindInstance("pheasant")) {
+            BiVector currentForward = (pheasant->transform * -localForward * ~pheasant->transform).Grade2();
+            currentForward = currentForward.Normalized();
+            float angle = acos(std::clamp(- currentForward | desiredForward, -1.f, 1.f)); //only works with normalized!!!
+
+            float curX = currentForward.e23();
+            float curZ = currentForward.e12();
+            float desX = desiredForward.e23();
+            float desZ = desiredForward.e12();
+
+            // 2D Cross product (determinant) tells us if Desired is Left or Right of Current
+            float side = (curX * desZ) - (curZ * desX); //(ai gave the idea, not the code!)
+            float sign = (side < 0) ? 1.0f : -1.0f; 
+
+            if (angle > 0.05f)
+            {
+                BiVector rotationLine(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+                float rotationStep{ 10.f };
+                Motor R = Motor::Rotation((angle * rotationStep) * sign, rotationLine);
+                pheasant->transform = R * pheasant->transform;
+            }
+        }
     }
 
     m_cameraDistance -= input.scrollDelta * 2.0f;
@@ -132,8 +149,7 @@ void TestBoxScene::OnInput(const InputState& input) {
     const float camY = std::sin(m_cameraPitch) * m_cameraDistance + targetY;
     const float camZ = std::cos(m_cameraYaw) * std::cos(m_cameraPitch) * m_cameraDistance;
 
-    m_cameraEye = TriVector(camX, camY, camZ);
-    //m_cameraTarget = TriVector(0.0f, targetY, 0.0f);
+    m_cameraEye = m_cameraTarget + TriVector(camX, camY, camZ); //cam follows bird
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f);
 
     //direction in game
@@ -141,58 +157,50 @@ void TestBoxScene::OnInput(const InputState& input) {
     //x pos is left
     //y is upwards
 
-    //reinitialize
-    m_Intent.forward = 0.f;
-    m_Intent.right = 0.f;
 
-    //handling input for the transformation pheasent
-    if (input.keyW || input.keyUp)    m_Intent.forward += 1.f;
-    if (input.keyS || input.keyDown)  m_Intent.forward -= 1.f;
-    if (input.keyD || input.keyRight) m_Intent.right += 1.f;
-    if (input.keyA || input.keyLeft)  m_Intent.right -= 1.f;
-
-    //for direction: join camera and pos bird -> get direction line
+    //------------------movement-----------------------------
 
     if (auto* pheasant = FindInstance("pheasant"))
     {
         bool translatePheasant{ false };
-        const BiVector dirFromCamToMesh{ (m_cameraTarget & m_cameraEye).Normalized()};
+        const BiVector camDirection{ (m_cameraTarget & m_cameraEye).Normalized() };
         BiVector movementDirection{ 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
-
-
-        if (input.keyW || input.keyUp)
+        if (input.keyW)
         {
-            movementDirection.e01() += dirFromCamToMesh.e23();
-            movementDirection.e03() += dirFromCamToMesh.e12();
+            movementDirection.e03() += camDirection.e12();
+            movementDirection.e01() += camDirection.e23();
             translatePheasant = true;
         }
-        if (input.keyD || input.keyRight)
+        if (input.keyA)
         {
-            movementDirection.e01() -= dirFromCamToMesh.e12();
-            movementDirection.e03() += dirFromCamToMesh.e23();
+            movementDirection.e03() -= camDirection.e23();
+            movementDirection.e01() += camDirection.e12();
             translatePheasant = true;
         }
-        if (input.keyS || input.keyDown)
+        if (input.keyS)
         {
-            movementDirection.e01() -= dirFromCamToMesh.e23();
-            movementDirection.e03() += dirFromCamToMesh.e23();
+            movementDirection.e03() -= camDirection.e12();
+            movementDirection.e01() -= camDirection.e23();
             translatePheasant = true;
         }
-        if (input.keyA || input.keyLeft)
+        if (input.keyD)
         {
-            movementDirection.e01() += dirFromCamToMesh.e12();
-            movementDirection.e03() -= dirFromCamToMesh.e23();
+            movementDirection.e03() += camDirection.e23();
+            movementDirection.e01() -= camDirection.e12();
             translatePheasant = true;
         }
-
-
-        if (translatePheasant)
+        if (translatePheasant) //only do if buttons pressed
         {
-            const float movementSpeed{ m_pheasantSpeed / 10.f };
+            const float movementSpeed{ m_pheasantSpeed / 5.f };
             const Motor T{ Motor::Translation(movementSpeed, movementDirection) };
             pheasant->transform = pheasant->transform * T;
         }
+    }
 
+
+    if (input.key1)
+    {
+        std::cout << "----------------midpoint---------------\n"; //for testing
     }
 }
 
@@ -220,4 +228,6 @@ void TestBoxScene::OnGui() {
     ImGui::End();
 }
 
-void TestBoxScene::OnShutdown() {}
+void TestBoxScene::OnShutdown() {
+    m_planes.clear();
+}

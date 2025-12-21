@@ -8,7 +8,7 @@ DebugDemoScene::DebugDemoScene(const std::string& resourceDir)
 
 void DebugDemoScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     // Ground plane
-    AddGroundPlane(0.0f, Scene::Material::Lambert(Scene::Color(0.3f, 0.4f, 0.3f)));
+    AddGroundPlane (0.0f, Scene::Material::Lambert(Scene::Color(0.3f, 0.4f, 0.3f)));
 
     // Central sphere that will be animated
 

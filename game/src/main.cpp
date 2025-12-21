@@ -30,9 +30,9 @@ std::unique_ptr<GameScene> createScene(const std::string& name, const std::strin
     } else if (name == "debug") {
         return std::make_unique<TestBoxScene>(resourceDir);
     }
-    std::cerr << "Unknown scene '" << name << "', using debug scene\n";
+    //std::cerr << "Unknown scene '" << name << "', using debug scene\n";
     //return auto scene = std::make_unique<MyScene>(config.resourceDirectory);
-
+    
     return std::make_unique<TestBoxScene>(resourceDir);
 }
 
