@@ -39,6 +39,10 @@ private:
     float m_pheasantHeight{0.0f};
     float m_pheasantScale{0.5f};
 
+    //Target 
+    uint32_t m_Target{ 1 };
+    TriVector m_TargetPos{ 0.f, 5.f, 30.f };
+
     // own variables
     TriVector cameraTargetPlayer;
     float bulletSpeed{};
@@ -47,6 +51,7 @@ private:
     std::vector<TriVector> m_Bullets{};
     bool bulletCalled{ false };
     BiVector bulletDirection{};
+    float m_pBulletTimer{};
 
     enum class walkingstate {
         forwards,

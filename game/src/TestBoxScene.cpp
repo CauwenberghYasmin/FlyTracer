@@ -9,7 +9,7 @@ TestBoxScene::TestBoxScene(const std::string& resourceDir)
 
 void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     constexpr float halfWidth = 50.0f;
-    constexpr float height = 30.0f;
+    constexpr float height = 50.0f;
 
     // Bottom plane
     AddPlane (Vector(0.0f, 0.0f, 1.0f, 0.0f),
@@ -48,6 +48,14 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
         m_cameraTarget = { pheasant->transform.e01()*2, pheasant->transform.e02()*2, pheasant->transform.e03()*2 };
     }
 
+    //mesh target
+    m_Target = LoadMesh("target.obj", "target.jpg");
+    AddMeshInstance(m_Target, m_TargetPos, "Target");
+
+    if (auto* target = FindInstance("Target")) {
+        target->scale = 0.1;
+    }
+
     // Point light
     AddPointLight(TriVector(0.0f, 20.0f, 0.0f),
                   Scene::Color(1.0f, 1.0f, 1.0f), 2.0f, 100.0f);
@@ -71,6 +79,7 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
 void TestBoxScene::OnUpdate(float deltaTime) {
     UpdateFPS(deltaTime);
     m_Timer += deltaTime;
+    m_pBulletTimer += deltaTime;
     //CalcRotation();
 
     //Update pheasant
@@ -214,7 +223,7 @@ void TestBoxScene::SpawnBullet()
 {
     std::cout << "pressed shooting";
     m_Timer = 0.f;
-    bulletSpeed = 50.f;
+    bulletSpeed = 70.f;
     float frontOffset = 10.0f;
     bulletCalled = true;
 
@@ -238,49 +247,44 @@ void TestBoxScene::SpawnBullet()
 void TestBoxScene::UpdateBullet(float deltaTime)
 {
     Scene::GPUSphere* sphere = GetSphere(bullet);
-    if (!sphere || bulletSpeed <= 0.01f) return;
+    if (!sphere) return;
 
-    float friction = 0.98f;
-    bulletSpeed *= std::pow(friction, deltaTime * 40.0f);
+    // 1. Friction & Speed Management
+    if (bulletSpeed > 0.01f) {
+        float friction = 0.98f;
+        bulletSpeed *= std::pow(friction, deltaTime * 40.0f); //speed slows down
+    }
+    else {
+        bulletSpeed = 0.0f; // Completely stop if too slow
+    }
 
-    // 1. Calculate the movement for this frame
-    Motor T = Motor::Translation(bulletSpeed * deltaTime, -!bulletDirection);
-
+    // gravity
     TriVector currentCenter(sphere->center[0], sphere->center[1], sphere->center[2], 1.0f);
-    TriVector nextPos = (T * currentCenter * ~T).Grade3();
+    bool onGround = (currentCenter.e013() <= bulletRadius + 0.05f);
 
-    // 2. Collision Detection
+    if (!onGround || bulletSpeed > 0.1f) {
+        float gravityStrength = 2.0f * deltaTime;
+        bulletDirection.e31() += gravityStrength;
+        bulletDirection = bulletDirection.Normalized();
+    }
+
+    // movement
+    Motor T = Motor::Translation(bulletSpeed * deltaTime, -!bulletDirection); //set's direction ball
+    TriVector nextPos = (T* currentCenter * ~T).Grade3();
+
+    // 4. Collision Loop
     for (size_t i = 0; i < m_Planes.size(); ++i)
     {
         float distance = (m_Planes[i] ^ nextPos).e0123();
 
-        if (distance < bulletRadius)
-        {
-            bulletDirection = (~m_Planes[i] * bulletDirection * m_Planes[i]).Grade2().Normalized();
-
-            // took ball radius into account
-            float side = ((distance - bulletRadius) >= 0) ? 1.0f : -1.0f;
-            float pushAmount = (bulletRadius - std::abs(distance)) * side;
-
-            BiVector planeNormal(m_Planes[i].e1(), m_Planes[i].e2(), m_Planes[i].e3(), 0, 0, 0);
-
-            // Create the motor using the corrected pushAmount
-            Motor Push = Motor::Translation(pushAmount, planeNormal);
-            nextPos = (Push * nextPos * ~Push).Grade3();
-
-            bulletSpeed *= 0.7f;
-        }
-       
+        if (std::abs(distance) < bulletRadius)
+            bulletDirection = { 0,0,0,0,0,0 }; //ball stops and will only go down due to gravity
     }
 
-    // 3. Ground Clamp (Prevent sinking)
-    // Assuming floor is at Y=0 and bird's Y is m_cameraTarget.e013()
+    
+    //can't go below floor
     if (nextPos.e013() < bulletRadius) {
         nextPos.e013() = bulletRadius;
-
-        // If it hits the floor, we should also reflect the direction UP
-        // Or just zero out the vertical movement if it's sliding
-        if (bulletDirection.e31() > 0) bulletDirection.e31() *= -1.0f;
     }
 
     sphere->SetCenter(nextPos);
