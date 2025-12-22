@@ -66,7 +66,6 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     //original
     /*m_sphere1Id = AddSphere(TriVector(m_sphere1Radius, m_sphere1Height, 0.0f), 1.0f,
         Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));*/
-
 }
 
 void TestBoxScene::OnUpdate(float deltaTime) {
@@ -257,20 +256,21 @@ void TestBoxScene::UpdateBullet(float deltaTime)
 
         if (distance < bulletRadius)
         {
-            // A. REFLECT the direction line
-            // We use the sandwich product on the direction
             bulletDirection = (~m_Planes[i] * bulletDirection * m_Planes[i]).Grade2().Normalized();
 
-            // B. PUSH the ball out of the wall (IMPORTANT)
-            // This prevents the ball from getting stuck inside the wall
-            float pushAmount = bulletRadius - distance + 0.1f; // Add a tiny margin
+            // took ball radius into account
+            float side = ((distance - bulletRadius) >= 0) ? 1.0f : -1.0f;
+            float pushAmount = (bulletRadius - std::abs(distance)) * side;
+
             BiVector planeNormal(m_Planes[i].e1(), m_Planes[i].e2(), m_Planes[i].e3(), 0, 0, 0);
+
+            // Create the motor using the corrected pushAmount
             Motor Push = Motor::Translation(pushAmount, planeNormal);
             nextPos = (Push * nextPos * ~Push).Grade3();
 
-            // C. Adjust Speed (Optional: lose energy on bounce)
             bulletSpeed *= 0.7f;
         }
+       
     }
 
     // 3. Ground Clamp (Prevent sinking)
