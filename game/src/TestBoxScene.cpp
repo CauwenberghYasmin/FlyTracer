@@ -34,8 +34,6 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     m_planes.push_back(std::move(Vector(0.0f, 0.0f, -1.0f, 0.0f))); //bootom
     m_Planes.push_back(std::move(Vector(-halfWidth, -1.0f, 0.0f, 0.0f)));
     m_Planes.push_back(std::move(Vector(-halfWidth, 1.0f, 0.0f, 0.0f)));
-
-
     //+ make normals point inwards
 
 
@@ -58,10 +56,21 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     // Camera
     m_cameraEye = TriVector(0.0f, 15.0f, 60.0f);
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f, 0.0f);
+
+    //---------can only initialize meshes here!-------------
+    bullet = AddSphere(TriVector(-5,-5,-5), 1.0f,      //putting ball out of sight
+        Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));
+   
+    //original
+    /*m_sphere1Id = AddSphere(TriVector(m_sphere1Radius, m_sphere1Height, 0.0f), 1.0f,
+        Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));*/
+
 }
 
 void TestBoxScene::OnUpdate(float deltaTime) {
     UpdateFPS(deltaTime);
+    m_Timer += deltaTime;
+    //CalcRotation();
 
     //Update pheasant
     m_pheasantTime += m_pheasantSpeed * deltaTime;
@@ -72,7 +81,7 @@ void TestBoxScene::OnUpdate(float deltaTime) {
         const TriVector origin(0.0f, 0.0f, 0.0f); //safety net 
         m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen  
 
-        //------------------------collision walls----------------------------
+        //------------------------ bird collision walls----------------------------
 
         TriVector currentPos = m_cameraTarget;
 
@@ -88,13 +97,12 @@ void TestBoxScene::OnUpdate(float deltaTime) {
 
                 float margin{ 0.5f };
                 float pushAmount = (meshRadius + margin) - distance;
-
                 currentPos.e032() -= m_Planes[index].e1() * pushAmount;
                 currentPos.e013() -= m_Planes[index].e2() * pushAmount;
                 currentPos.e021() -= m_Planes[index].e3() * pushAmount;
-
                 SetInstancePosition(m_pheasantMeshId, currentPos);
 
+                CalcRotation();
             }
         }        
     }
@@ -112,17 +120,13 @@ void TestBoxScene::OnUpdate(float deltaTime) {
 
         if (signedDistance < cameraRadius)
         {
+            std::cout << "collided with plane " << m_planes[index] << std::endl;
             m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
         }
     }
-
-
-    if (m_cameraEye.e013() == NAN) //small safety measure
-    {
-        std::cout << "camera crashed";
-        m_cameraEye = TriVector(0.0f, 15.0f, 60.0f);
-    }
 }   
+
+
 
 void TestBoxScene::OnInput(const InputState& input) {
     if (input.rightMouseDown) {
@@ -130,35 +134,14 @@ void TestBoxScene::OnInput(const InputState& input) {
         m_cameraPitch += input.mouseDeltaY * m_mouseSensitivity;
         m_cameraPitch = std::clamp(m_cameraPitch, -1.55f, 1.55f);
 
-
-        //----------ROTATION----------------            //only when redirecting camera (right mouse button)
-        BiVector desiredForward = (m_cameraTarget & m_cameraEye).Normalized(); //opposite, because bird should face away!
-        desiredForward.e31() = 0; // can't go up
-        desiredForward = desiredForward.Normalized();
-        const BiVector localForward{ 0,0,0,0,0,1 };
-
-        if (auto* pheasant = FindInstance("pheasant")) {
-            BiVector currentForward = (pheasant->transform * -localForward * ~pheasant->transform).Grade2();
-            currentForward = currentForward.Normalized();
-            float angle = acos(std::clamp(- currentForward | desiredForward, -1.f, 1.f)); //only works with normalized!!!
-
-            float curX = currentForward.e23();
-            float curZ = currentForward.e12();
-            float desX = desiredForward.e23();
-            float desZ = desiredForward.e12();
-
-            // 2D Cross product (determinant) tells us if Desired is Left or Right of Current
-            float side = (curX * desZ) - (curZ * desX); //(ai gave the idea, not the code!)
-            float sign = (side < 0) ? 1.0f : -1.0f; 
-
-            if (angle > 0.05f)
-            {
-                BiVector rotationLine(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-                float rotationStep{ 10.f };
-                Motor R = Motor::Rotation((angle * rotationStep) * sign, rotationLine);
-                pheasant->transform = R * pheasant->transform;
-            }
+        if (allowCalcRotation)
+        {
+            CalcRotation(); //only when pressing mouse!
         }
+    }
+    if (input.keyQ)
+    {
+        allowCalcRotation = true;
     }
 
     m_cameraDistance -= input.scrollDelta * 2.0f;
@@ -171,52 +154,35 @@ void TestBoxScene::OnInput(const InputState& input) {
     const float camZ = std::cos(m_cameraYaw) * std::cos(m_cameraPitch) * m_cameraDistance;
 
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f);
+    m_cameraEye = m_cameraTarget + TriVector(camX, camY, camZ); //cam follows bird 
 
-    // nan check
-    if (!std::isnan(camX) && !std::isnan(camY) && !std::isnan(camZ)) {
-        m_cameraEye = m_cameraTarget + TriVector(camX, camY, camZ); //cam follows bird
-    }
- 
-    //direction in game
-    //z is forward
-    //x pos is left
-    //y is upwards
-
-    //------------------movement-----------------------------
-
+    //---------------Movement bird------------------------------
     if (auto* pheasant = FindInstance("pheasant"))
     {
-        bool translatePheasant{ false };
-        const BiVector camDirection{ (m_cameraTarget & m_cameraEye).Normalized() };
-        BiVector movementDirection{ 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
-        if (input.keyW)
+        const BiVector lookLine = (m_cameraTarget & m_cameraEye).Normalized();
+        BiVector forward(lookLine.e23(), 0, lookLine.e12(), 0, 0, 0);
+
+        // rotating "Forward" 90 degrees
+        static const Motor rotate90 = Motor::Rotation(90, BiVector(0, 0, 0, 0, 1, 0));
+        BiVector right = (rotate90 * forward * ~rotate90).Grade2();
+
+        BiVector moveDir{ 0,0,0,0,0,0 };
+        bool isMoving = false;
+
+        //+= for diagonal movement (press keys same time)
+        if (input.keyW) { moveDir += forward; isMoving = true; }
+        if (input.keyS) { moveDir -= forward; isMoving = true; }
+        if (input.keyD) { moveDir -= right;   isMoving = true; }
+        if (input.keyA) { moveDir += right;   isMoving = true; }
+
+        if (isMoving)
         {
-            movementDirection.e03() += camDirection.e12();
-            movementDirection.e01() += camDirection.e23();
-            translatePheasant = true;
-        }
-        if (input.keyA)
-        {
-            movementDirection.e03() -= camDirection.e23();
-            movementDirection.e01() += camDirection.e12();
-            translatePheasant = true;
-        }
-        if (input.keyS)
-        {
-            movementDirection.e03() -= camDirection.e12();
-            movementDirection.e01() -= camDirection.e23();
-            translatePheasant = true;
-        }
-        if (input.keyD)
-        {
-            movementDirection.e03() += camDirection.e23();
-            movementDirection.e01() -= camDirection.e12();
-            translatePheasant = true;
-        }
-        if (translatePheasant) //only do if buttons pressed
-        {
-            const Motor T{ Motor::Translation(movementSpeed, movementDirection) };
-            pheasant->transform = pheasant->transform * T;
+            float norm = moveDir.VNorm();
+            if (norm > 0.0001f)
+            {
+                const Motor T = Motor::Translation(movementSpeed, moveDir);
+                pheasant->transform = pheasant->transform * T;
+            }
         }
     }
 
@@ -225,14 +191,45 @@ void TestBoxScene::OnInput(const InputState& input) {
     {
         std::cout << "----------------midpoint---------------\n"; //for testing
     }
+
+
+
+    //--------------------gun shooting------------------
+    if (input.keyShift && m_Timer > 1.f) //makes sure no spam pressing
+    {
+        std::cout << "pressed shooting";
+        m_Timer = 0.f;
+        bulletSpeed = 15.f;
+        bulletCalled = true;
+
+        TriVector center{ m_cameraTarget }; //pos bird
+
+        //const BiVector Direction = (m_cameraTarget & m_cameraEye).Normalized();
+        Scene::GPUSphere* sphere = GetSphere(bullet);
+        if (sphere)
+        {
+          
+            sphere->SetCenter(center);
+        }
+    }
+
+
+
+
+            //Motor T = Motor::Translation(bulletSpeed, Direction);
+            //TriVector currentCenter{ sphere->center[0],  sphere->center[1],  sphere->center[2] }; //sphere center is array, NOT TRIVECTOR
+            //TriVector newCenter = (T * currentCenter * ~T).Grade3();
+            //sphere->SetCenter(newCenter);
 }
 
 void TestBoxScene::OnGui() {
     ImGui::Begin("Test Box Scene");
     ImGui::Text("FPS: %.1f", GetFPS());
+    ImGui::Text("PRESS Q for rotations!");
     ImGui::Separator();
     ImGui::SliderFloat("Speed pheasant", &movementSpeed, 0.0f, 2.0f);
     ImGui::Separator();
+    ImGui::SliderFloat("Speed bullets", &bulletSpeed, 0.0f, 10.0f);
     ImGui::Text("Controls:");
     ImGui::Text("  Right-drag: Orbit camera");
     ImGui::Text("  Scroll: Zoom");
@@ -245,4 +242,36 @@ void TestBoxScene::OnGui() {
 
 void TestBoxScene::OnShutdown() {
     m_planes.clear();
+}
+
+
+void TestBoxScene::CalcRotation()
+{
+    BiVector desiredForward = (m_cameraTarget & m_cameraEye).Normalized(); //opposite, because bird should face away!
+    desiredForward.e31() = 0; // can't go up
+    desiredForward = desiredForward.Normalized();
+    const BiVector localForward{ 0,0,0,0,0,1 };
+
+    if (auto* pheasant = FindInstance("pheasant")) {
+        BiVector currentForward = (pheasant->transform * -localForward * ~pheasant->transform).Grade2();
+        currentForward = currentForward.Normalized();
+        float angle = acos(std::clamp(-currentForward | desiredForward, -1.f, 1.f)); //only works with normalized!!!
+
+        float curX = currentForward.e23();
+        float curZ = currentForward.e12();
+        float desX = desiredForward.e23();
+        float desZ = desiredForward.e12();
+
+        // 2D Cross product (determinant) tells us if Desired is Left or Right of Current
+        float side = (curX * desZ) - (curZ * desX); //(ai)
+        float sign = (side < 0) ? 1.0f : -1.0f;
+        //--
+        if (angle > 0.05f)
+        {
+            BiVector rotationLine(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+            float rotationStep{ 10.f };
+            Motor R = Motor::Rotation((angle * rotationStep) * sign, rotationLine);
+            pheasant->transform = R * pheasant->transform;
+        }
+    }
 }

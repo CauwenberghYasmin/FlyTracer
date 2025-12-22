@@ -26,14 +26,9 @@ private:
     float m_mouseSensitivity{0.005f};
 
     // Sphere rotation
-    uint32_t m_sphere1Id{0};
-    uint32_t m_sphere2Id{0};
-    float m_rotationAngle{0.0f};
-    float m_rotationSpeed{0.5f};
-    float m_sphere1Radius{20.0f};
-    float m_sphere2Radius{25.0f};
+    uint32_t bullet{0};
+    float m_sphere1Radius{5.0f};
     float m_sphere1Height{5.0f};
-    float m_sphere2Height{8.0f};
 
     // Pheasant mesh
     uint32_t m_pheasantMeshId{0};
@@ -46,6 +41,11 @@ private:
 
     // own variables
     TriVector cameraTargetPlayer;
+    float bulletSpeed{};
+    const float bulletRadius{ 200.f };
+    float m_Timer{ };
+    std::vector<TriVector> m_Bullets{};
+    bool bulletCalled{ false };
 
     enum class walkingstate {
         forwards,
@@ -101,4 +101,7 @@ private:
     std::vector<Vector> m_Planes;
 
     float movementSpeed{ m_pheasantSpeed / 5.f };
+
+    void CalcRotation();
+    bool allowCalcRotation{ false };
 };
