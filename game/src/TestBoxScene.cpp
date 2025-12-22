@@ -31,9 +31,11 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     m_planes.push_back(std::move(Vector(-height/2, 0.0f, 1.0f, 0.0f)));//top
     m_planes.push_back(std::move(Vector(-halfWidth / 2, -1.0f, 0.0f, 0.0f)));//left
     m_planes.push_back(std::move(Vector(-halfWidth / 2, 1.0f, 0.0f, 0.0f)));//right
-    m_planes.push_back(std::move(Vector(0.0f, 0.0f, -1.0f, 0.0f))); //bootom
+    m_planes.push_back(std::move(Vector(0.0f, 0.0f, -1.0f, 0.0f))); //bottom
     m_Planes.push_back(std::move(Vector(-halfWidth, -1.0f, 0.0f, 0.0f)));
     m_Planes.push_back(std::move(Vector(-halfWidth, 1.0f, 0.0f, 0.0f)));
+    m_Planes.push_back(std::move(Vector(0.0f, 0.0f, -1.0f, 0.0f)));
+    m_Planes.push_back(std::move(Vector(-height, 0.0f, 1.0f, 0.0f)));
     //+ make normals point inwards
 
 
@@ -173,11 +175,10 @@ void TestBoxScene::OnGui() {
     ImGui::Text("Camera Distance: %.1f", m_cameraDistance);
     ImGui::End();
 }
-
 void TestBoxScene::OnShutdown() {
     m_planes.clear();
+    m_Planes.clear();
 }
-
 
 void TestBoxScene::CalcRotation()
 {
@@ -214,7 +215,7 @@ void TestBoxScene::SpawnBullet()
 {
     std::cout << "pressed shooting";
     m_Timer = 0.f;
-    bulletSpeed = 15.f;
+    bulletSpeed = 50.f;
     float frontOffset = 10.0f;
     bulletCalled = true;
 
@@ -222,11 +223,11 @@ void TestBoxScene::SpawnBullet()
     TriVector spawnPos{ m_cameraTarget }; //pos bird
 
     //bullet spawned in front of pheasant
-    const BiVector lookLine = (m_cameraTarget & m_cameraEye).Normalized();
-    Motor moveForward = Motor::Translation(frontOffset, -!lookLine);//use dual
+    bulletDirection = (m_cameraTarget & m_cameraEye).Normalized(); //get's direction line when spawned, doesn't change during the update function!
+    Motor moveForward = Motor::Translation(frontOffset, -!bulletDirection);//sign makes sure bullet spawns in front
     spawnPos = (moveForward * spawnPos * ~moveForward).Grade3();
     //clamping so it spawns above the floor
-    spawnPos.e013() = std::clamp(spawnPos.e013(), m_cameraTarget.e013() + bulletRadius, 100.f);
+    spawnPos.e013() = std::clamp(spawnPos.e013(), m_cameraTarget.e013() + (bulletRadius * 2), 100.f);
 
     Scene::GPUSphere* sphere = GetSphere(bullet);
     if (sphere)
@@ -237,10 +238,52 @@ void TestBoxScene::SpawnBullet()
 
 void TestBoxScene::UpdateBullet(float deltaTime)
 {
-    //Motor T = Motor::Translation(bulletSpeed, Direction);
-            //TriVector currentCenter{ sphere->center[0],  sphere->center[1],  sphere->center[2] }; //sphere center is array, NOT TRIVECTOR
-            //TriVector newCenter = (T * currentCenter * ~T).Grade3();
-            //sphere->SetCenter(newCenter);
+    Scene::GPUSphere* sphere = GetSphere(bullet);
+    if (!sphere || bulletSpeed <= 0.01f) return;
+
+    float friction = 0.98f;
+    bulletSpeed *= std::pow(friction, deltaTime * 40.0f);
+
+    // 1. Calculate the movement for this frame
+    Motor T = Motor::Translation(bulletSpeed * deltaTime, -!bulletDirection);
+
+    TriVector currentCenter(sphere->center[0], sphere->center[1], sphere->center[2], 1.0f);
+    TriVector nextPos = (T * currentCenter * ~T).Grade3();
+
+    // 2. Collision Detection
+    for (size_t i = 0; i < m_Planes.size(); ++i)
+    {
+        float distance = (m_Planes[i] ^ nextPos).e0123();
+
+        if (distance < bulletRadius)
+        {
+            // A. REFLECT the direction line
+            // We use the sandwich product on the direction
+            bulletDirection = (~m_Planes[i] * bulletDirection * m_Planes[i]).Grade2().Normalized();
+
+            // B. PUSH the ball out of the wall (IMPORTANT)
+            // This prevents the ball from getting stuck inside the wall
+            float pushAmount = bulletRadius - distance + 0.1f; // Add a tiny margin
+            BiVector planeNormal(m_Planes[i].e1(), m_Planes[i].e2(), m_Planes[i].e3(), 0, 0, 0);
+            Motor Push = Motor::Translation(pushAmount, planeNormal);
+            nextPos = (Push * nextPos * ~Push).Grade3();
+
+            // C. Adjust Speed (Optional: lose energy on bounce)
+            bulletSpeed *= 0.7f;
+        }
+    }
+
+    // 3. Ground Clamp (Prevent sinking)
+    // Assuming floor is at Y=0 and bird's Y is m_cameraTarget.e013()
+    if (nextPos.e013() < bulletRadius) {
+        nextPos.e013() = bulletRadius;
+
+        // If it hits the floor, we should also reflect the direction UP
+        // Or just zero out the vertical movement if it's sliding
+        if (bulletDirection.e31() > 0) bulletDirection.e31() *= -1.0f;
+    }
+
+    sphere->SetCenter(nextPos);
 }
 
 void TestBoxScene::CameraCollisions()
@@ -257,7 +300,7 @@ void TestBoxScene::CameraCollisions()
 
         if (signedDistance < cameraRadius)
         {
-            std::cout << "collided with plane " << m_planes[index] << std::endl;
+            //std::cout << "collided with plane " << m_planes[index] << std::endl;
             m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
         }
     }
@@ -271,16 +314,15 @@ void TestBoxScene::BirdCollisions()
         m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen  
         TriVector currentPos = m_cameraTarget;
 
-        for (size_t index = 0; index < m_Planes.size(); ++index)
+        for (size_t index = 0; index < m_Planes.size()-2; ++index)
         {
             currentPos /= currentPos.e123();
 
             float distance = (m_Planes[index] ^ currentPos).e0123();
             float meshRadius = 20.f * pheasant->scale; // size bird
 
-            if (distance < meshRadius) {
-                std::cout << "collided\n";
-
+            if (distance < meshRadius) 
+            {
                 float margin{ 0.5f };
                 float pushAmount = (meshRadius + margin) - distance;
                 currentPos.e032() -= m_Planes[index].e1() * pushAmount;

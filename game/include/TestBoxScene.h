@@ -46,6 +46,7 @@ private:
     float m_Timer{ };
     std::vector<TriVector> m_Bullets{};
     bool bulletCalled{ false };
+    BiVector bulletDirection{};
 
     enum class walkingstate {
         forwards,
