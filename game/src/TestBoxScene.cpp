@@ -70,10 +70,6 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     //---------can only initialize meshes here!-------------
     bullet = AddSphere(TriVector(-5,-5,-5), bulletRadius,      //putting ball out of sight
         Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));
-   
-    //original
-    /*m_sphere1Id = AddSphere(TriVector(m_sphere1Radius, m_sphere1Height, 0.0f), 1.0f,
-        Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));*/
 }
 
 void TestBoxScene::OnUpdate(float deltaTime) {
@@ -152,14 +148,6 @@ void TestBoxScene::OnInput(const InputState& input) {
             }
         }
     }
-
-
-    if (input.key1)
-    {
-        std::cout << "----------------midpoint---------------\n"; //for testing
-    }
-
-
 
     //--------------------gun shooting------------------
     if (input.keyShift && m_Timer > 1.f) //makes sure no spam pressing
@@ -281,6 +269,19 @@ void TestBoxScene::UpdateBullet(float deltaTime)
             bulletDirection = { 0,0,0,0,0,0 }; //ball stops and will only go down due to gravity
     }
 
+    if (auto* target = FindInstance("Target")) {
+        TriVector diff = nextPos - m_TargetPos;
+
+        // Calc distance 
+        float distSq = diff.e032() * diff.e032() + diff.e013() * diff.e013() + diff.e021() * diff.e021();
+        float hitRadius = bulletRadius + 5.0f; // hardcoded target size 
+
+        if (distSq < (hitRadius * hitRadius)) {
+            std::cout << "TARGET HIT!" << std::endl;
+            bulletSpeed = 0.0f;
+            bulletDirection = { 0,0,0,0,0,0 };
+        }
+    }
     
     //can't go below floor
     if (nextPos.e013() < bulletRadius) {
@@ -304,7 +305,6 @@ void TestBoxScene::CameraCollisions()
 
         if (signedDistance < cameraRadius)
         {
-            //std::cout << "collided with plane " << m_planes[index] << std::endl;
             m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
         }
     }
