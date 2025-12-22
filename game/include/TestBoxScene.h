@@ -27,7 +27,7 @@ private:
 
     // Sphere rotation
     uint32_t bullet{0};
-    float m_sphere1Radius{5.0f};
+    float m_sphere1Radius{1.0f};
     float m_sphere1Height{5.0f};
 
     // Pheasant mesh
@@ -42,7 +42,7 @@ private:
     // own variables
     TriVector cameraTargetPlayer;
     float bulletSpeed{};
-    const float bulletRadius{ 200.f };
+    const float bulletRadius{ 1.f };
     float m_Timer{ };
     std::vector<TriVector> m_Bullets{};
     bool bulletCalled{ false };
@@ -104,4 +104,8 @@ private:
 
     void CalcRotation();
     bool allowCalcRotation{ false };
+    void UpdateBullet(float deltaTime);
+    void SpawnBullet();
+    void BirdCollisions();
+    void CameraCollisions();
 };

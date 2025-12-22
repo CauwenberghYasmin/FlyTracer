@@ -58,7 +58,7 @@ void TestBoxScene::OnInit([[maybe_unused]] VulkanRenderer* renderer) {
     m_cameraUp = TriVector(0.0f, 1.0f, 0.0f, 0.0f);
 
     //---------can only initialize meshes here!-------------
-    bullet = AddSphere(TriVector(-5,-5,-5), 1.0f,      //putting ball out of sight
+    bullet = AddSphere(TriVector(-5,-5,-5), bulletRadius,      //putting ball out of sight
         Scene::Material::Metal(Scene::Color(0.9f, 0.3f, 0.3f), 0.2f));
    
     //original
@@ -75,55 +75,12 @@ void TestBoxScene::OnUpdate(float deltaTime) {
     //Update pheasant
     m_pheasantTime += m_pheasantSpeed * deltaTime;
 
+    BirdCollisions();
+    CameraCollisions();
 
-    if (auto* pheasant = FindInstance("pheasant")) {
-        //get pos for camera -> in 
-        const TriVector origin(0.0f, 0.0f, 0.0f); //safety net 
-        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen  
-
-        //------------------------ bird collision walls----------------------------
-
-        TriVector currentPos = m_cameraTarget;
-
-        for (size_t index = 0; index < m_Planes.size(); ++index) 
-        {
-            currentPos /= currentPos.e123();
-
-            float distance = (m_Planes[index] ^ currentPos).e0123();
-            float meshRadius = 20.f * pheasant->scale; // size bird
-       
-            if (distance < meshRadius) {
-                std::cout << "collided\n";
-
-                float margin{ 0.5f };
-                float pushAmount = (meshRadius + margin) - distance;
-                currentPos.e032() -= m_Planes[index].e1() * pushAmount;
-                currentPos.e013() -= m_Planes[index].e2() * pushAmount;
-                currentPos.e021() -= m_Planes[index].e3() * pushAmount;
-                SetInstancePosition(m_pheasantMeshId, currentPos);
-
-                CalcRotation();
-            }
-        }        
-    }
-
-    //-----------------check collision with camera---------------------
-    for (size_t index = 0; index < m_planes.size(); ++index)
-    {
-        TriVector cameraPoint = m_cameraEye;
-        cameraPoint /= cameraPoint.e123(); //weight e123 = 1
-
-        MultiVector wedgeResult = m_planes[index] ^ cameraPoint; // calc distance
-        float signedDistance = wedgeResult.e0123();
-
-        float cameraRadius = 0.03f; //safety net or boundry
-
-        if (signedDistance < cameraRadius)
-        {
-            std::cout << "collided with plane " << m_planes[index] << std::endl;
-            m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
-        }
-    }
+    if (bulletCalled) //function to update bullet (only if spawned)
+        UpdateBullet(deltaTime);
+    
 }   
 
 
@@ -196,30 +153,7 @@ void TestBoxScene::OnInput(const InputState& input) {
 
     //--------------------gun shooting------------------
     if (input.keyShift && m_Timer > 1.f) //makes sure no spam pressing
-    {
-        std::cout << "pressed shooting";
-        m_Timer = 0.f;
-        bulletSpeed = 15.f;
-        bulletCalled = true;
-
-        TriVector center{ m_cameraTarget }; //pos bird
-
-        //const BiVector Direction = (m_cameraTarget & m_cameraEye).Normalized();
-        Scene::GPUSphere* sphere = GetSphere(bullet);
-        if (sphere)
-        {
-          
-            sphere->SetCenter(center);
-        }
-    }
-
-
-
-
-            //Motor T = Motor::Translation(bulletSpeed, Direction);
-            //TriVector currentCenter{ sphere->center[0],  sphere->center[1],  sphere->center[2] }; //sphere center is array, NOT TRIVECTOR
-            //TriVector newCenter = (T * currentCenter * ~T).Grade3();
-            //sphere->SetCenter(newCenter);
+        SpawnBullet();
 }
 
 void TestBoxScene::OnGui() {
@@ -272,6 +206,90 @@ void TestBoxScene::CalcRotation()
             float rotationStep{ 10.f };
             Motor R = Motor::Rotation((angle * rotationStep) * sign, rotationLine);
             pheasant->transform = R * pheasant->transform;
+        }
+    }
+}
+
+void TestBoxScene::SpawnBullet()
+{
+    std::cout << "pressed shooting";
+    m_Timer = 0.f;
+    bulletSpeed = 15.f;
+    float frontOffset = 10.0f;
+    bulletCalled = true;
+
+    //bullet spawn above ground
+    TriVector spawnPos{ m_cameraTarget }; //pos bird
+
+    //bullet spawned in front of pheasant
+    const BiVector lookLine = (m_cameraTarget & m_cameraEye).Normalized();
+    Motor moveForward = Motor::Translation(frontOffset, -!lookLine);//use dual
+    spawnPos = (moveForward * spawnPos * ~moveForward).Grade3();
+    //clamping so it spawns above the floor
+    spawnPos.e013() = std::clamp(spawnPos.e013(), m_cameraTarget.e013() + bulletRadius, 100.f);
+
+    Scene::GPUSphere* sphere = GetSphere(bullet);
+    if (sphere)
+    {
+        sphere->SetCenter(spawnPos);
+    }
+}
+
+void TestBoxScene::UpdateBullet(float deltaTime)
+{
+    //Motor T = Motor::Translation(bulletSpeed, Direction);
+            //TriVector currentCenter{ sphere->center[0],  sphere->center[1],  sphere->center[2] }; //sphere center is array, NOT TRIVECTOR
+            //TriVector newCenter = (T * currentCenter * ~T).Grade3();
+            //sphere->SetCenter(newCenter);
+}
+
+void TestBoxScene::CameraCollisions()
+{
+    for (size_t index = 0; index < m_planes.size(); ++index)
+    {
+        TriVector cameraPoint = m_cameraEye;
+        cameraPoint /= cameraPoint.e123(); //weight e123 = 1
+
+        MultiVector wedgeResult = m_planes[index] ^ cameraPoint; // calc distance
+        float signedDistance = wedgeResult.e0123();
+
+        float cameraRadius = 0.03f; //safety net or boundry
+
+        if (signedDistance < cameraRadius)
+        {
+            std::cout << "collided with plane " << m_planes[index] << std::endl;
+            m_cameraEye = (m_planes[index] * m_cameraEye * ~m_planes[index]).Grade3();
+        }
+    }
+}
+
+void TestBoxScene::BirdCollisions()
+{
+    if (auto* pheasant = FindInstance("pheasant")) {
+        //get pos for camera -> in 
+        const TriVector origin(0.0f, 0.0f, 0.0f); //safety net 
+        m_cameraTarget = (~pheasant->transform * origin * (pheasant->transform)).Grade3();      //bird always center screen  
+        TriVector currentPos = m_cameraTarget;
+
+        for (size_t index = 0; index < m_Planes.size(); ++index)
+        {
+            currentPos /= currentPos.e123();
+
+            float distance = (m_Planes[index] ^ currentPos).e0123();
+            float meshRadius = 20.f * pheasant->scale; // size bird
+
+            if (distance < meshRadius) {
+                std::cout << "collided\n";
+
+                float margin{ 0.5f };
+                float pushAmount = (meshRadius + margin) - distance;
+                currentPos.e032() -= m_Planes[index].e1() * pushAmount;
+                currentPos.e013() -= m_Planes[index].e2() * pushAmount;
+                currentPos.e021() -= m_Planes[index].e3() * pushAmount;
+                SetInstancePosition(m_pheasantMeshId, currentPos);
+
+                CalcRotation();
+            }
         }
     }
 }
