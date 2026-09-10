@@ -12,18 +12,20 @@ To highlight certain parts, I’ve extracted 3 formulas that I used in the proje
 
 ### The Sandwich Product for Point Transformation
 The Formula: nextPos = (T * currentCenter * ~T).Grade3();
+
 I used this to transform the sphere center (a trivector ) based on the translation Motor.
 By extracting the third grade, I can assign it again to the sphere.
 
 
 ### The Wedge Product for Distance Calculation
-The Formula: distance = (m_Planes[index] ^ currentPos).e0123();1
+The Formula: distance = (m_Planes[index] ^ currentPos).e0123();
 This formula was used multiple times to calculate the distance between 2 objects. In
 this project it was used for the collision’s calculations.
 
 
 ### Translation via Line Duality
 The Formula: Motor T = Motor::Translation(bulletSpeed * deltaTime, -!bulletDirection);
+
 I used this to create the path my sphere had to follow.
 
 <img width="1200"  alt="image" src="https://github.com/user-attachments/assets/b5458473-0476-4866-b727-d4736f8b55e9" />
