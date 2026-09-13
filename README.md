@@ -1,11 +1,12 @@
-# FlyTracer
+# Math projectiles with PPGA
 
-A real-time Vulkan compute shader raytracer built for educational purposes at DAE. Uses Projective Geometric Algebra (PGA) via the [FlyFish](https://github.com/fdlombae/FlyFish) library for 3D transformations.
+### PPGA
 
-### [Documentation](https://fdlombae.github.io/FlyTracer/)
+PPGA stands for Plane-based Projective Geometric Algebra. This let's us apply a unifying geometric ‘all-in’ paradigm (graphics as well as virtual reality)
+without conversions to linear algebra routines, aswell as gain performance not by cycle counts, but through writing lesser code volume.
 
-
-In this project I’ve been assigned to use 3D PPGA operations and transformations to create the start of a third person 3D game with movement, collisions and interestingcamera. 
+### Project
+In this project I’ve been assigned to use 3D PPGA operations and transformations to create the start of a third person 3D game with movement, collisions and interesting camera. 
 As my extra feature I’ve decided to use a projectile, that the player can use and throw at different angles. This sphere can interact with their environment and score a
 point by hitting the target.
 To highlight certain parts, I’ve extracted 3 formulas that I used in the project to create this result.
@@ -38,3 +39,11 @@ I used this to create the path my sphere had to follow.
 
 <img width="1200"  alt="image" src="https://github.com/user-attachments/assets/27ef0213-b5c9-485b-9bee-40f94c95152c" />
 
+
+
+# FlyTracer
+
+FlyTracer is the engine used to make this project, provided by the school.
+This is a real-time Vulkan compute shader raytracer built for educational purposes at DAE. Uses Projective Geometric Algebra (PGA) via the [FlyFish](https://github.com/fdlombae/FlyFish) library for 3D transformations.
+
+### [Documentation](https://fdlombae.github.io/FlyTracer/)
